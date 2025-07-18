@@ -1,102 +1,295 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Image from 'next/image';
+
+// Mock data per i risultati
+const mockResults = [
+  {
+    sn: '2504485',
+    codiceManuale: 'MVC_STD',
+    nome: 'Manuale Ventilatore Standard',
+    descrizione: 'Manuale completo per l\'installazione, l\'uso e la manutenzione del ventilatore standard. Include istruzioni dettagliate per il montaggio, le specifiche tecniche e i controlli di sicurezza.',
+    revisione: '001',
+    lingueDisponibili: ['IT', 'EN', 'DE', 'FR']
+  },
+  {
+    sn: '2504485',
+    codiceManuale: 'ROLLOUT',
+    nome: 'Manuale Installazione Rollout',
+    descrizione: 'Guida specifica per l\'installazione del sistema rollout. Contiene schemi di montaggio, dimensioni di ingombro e procedure di collaudo.',
+    revisione: '001',
+    lingueDisponibili: ['IT', 'EN', 'ES']
+  },
+  {
+    sn: '2504485',
+    codiceManuale: 'SWINGOUT',
+    nome: 'Manuale Installazione Swingout',
+    descrizione: 'Istruzioni complete per l\'installazione del sistema swingout. Include dettagli sui meccanismi di apertura e chiusura, manutenzione preventiva e risoluzione problemi.',
+    revisione: '001',
+    lingueDisponibili: ['IT', 'EN', 'DE']
+  }
+];
+
+const lingue = [
+  { code: 'IT', name: 'Italiano' },
+  { code: 'EN', name: 'English' },
+  { code: 'DE', name: 'Deutsch' },
+  { code: 'FR', name: 'Français' },
+  { code: 'ES', name: 'Español' }
+];
+
+export default function ManualSearch() {
+  const searchParams = useSearchParams();
+  const [serialNumber, setSerialNumber] = useState('');
+  const [selectedLanguage, setSelectedLanguage] = useState('IT');
+  const [isSearching, setIsSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [searchResults, setSearchResults] = useState<typeof mockResults>([]);
+
+  // Gestione parametro URL serial
+  useEffect(() => {
+    const serialFromUrl = searchParams.get('serial');
+    if (serialFromUrl) {
+      setSerialNumber(serialFromUrl);
+      handleSearch(serialFromUrl, selectedLanguage);
+    }
+  }, [searchParams]);
+
+  const handleSearch = async (sn?: string, lang?: string) => {
+    const searchSN = sn || serialNumber;
+    
+    if (!searchSN.trim()) {
+      alert('Inserire il Serial Number');
+      return;
+    }
+
+    setIsSearching(true);
+    setShowResults(false);
+
+    // Simulazione chiamata API
+    setTimeout(() => {
+      // Filtro mock results in base al serial number
+      const filtered = mockResults.filter(result => 
+        result.sn.includes(searchSN)
+      );
+      
+      setSearchResults(filtered);
+      setShowResults(true);
+      setIsSearching(false);
+    }, 1000);
+  };
+
+  const downloadManual = (manual: typeof mockResults[0], language: string) => {
+    // Simulazione download - in produzione sarà una chiamata API
+    console.log(`Downloading manual: ${manual.codiceManuale} - ${language}`);
+    alert(`Download del manuale ${manual.codiceManuale} in ${language}`);
+  };
+
+  const getLanguageName = (code: string) => {
+    return lingue.find(lang => lang.code === code)?.name || code;
+  };
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="shadow-sm border-b border-gray-200" style={{ backgroundColor: '#007AC2' }}>
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="flex items-center gap-4">
+            {/* Logo Ferrari */}
+            <div className="flex-shrink-0">
+              <Image
+                src="/logo Ferrari.svg"
+                alt="Ferrari Logo"
+                width={60}
+                height={48}
+                className="h-12 w-auto"
+              />
+            </div>
+            
+            {/* Titolo */}
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold text-white">
+                Ferrari Ventilatori - Ricerca Manuali
+              </h1>
+              <p className="mt-2 text-blue-100 text-sm lg:text-base">
+                Inserisci il Serial Number del ventilatore per accedere ai manuali
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      {/* Main Content */}
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* Search Form */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* Serial Number Input */}
+            <div className="md:col-span-2">
+              <label htmlFor="serial" className="block text-sm font-medium text-gray-700 mb-2">
+                Serial Number
+              </label>
+              <input
+                type="text"
+                id="serial"
+                value={serialNumber}
+                onChange={(e) => setSerialNumber(e.target.value)}
+                placeholder="Inserisci il Serial Number (es. 2504485)"
+                className="w-full h-12 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-colors text-gray-700"
+              />
+            </div>
+
+            {/* Language Selector */}
+            <div>
+              <label htmlFor="language" className="block text-sm font-medium text-gray-700 mb-2">
+                Lingua
+              </label>
+              <select
+                id="language"
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="w-full h-12 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-colors bg-white text-gray-700"
+              >
+                {lingue.map((lingua) => (
+                  <option key={lingua.code} value={lingua.code}>
+                    {lingua.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Search Button */}
+          <button
+            onClick={() => handleSearch()}
+            disabled={isSearching}
+            className="w-full md:w-auto px-8 py-3 text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
+            style={{ backgroundColor: '#007AC2' }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            {isSearching ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                Ricerca in corso...
+              </div>
+            ) : (
+              'Cerca Manuali'
+            )}
+          </button>
+        </div>
+
+        {/* Results Section */}
+        {showResults && (
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-700 mb-4">
+              Risultati della ricerca
+            </h2>
+
+            {searchResults.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-gray-400 text-6xl mb-4">📄</div>
+                <p className="text-gray-700">
+                  Nessun manuale trovato per il Serial Number &quot;{serialNumber}&quot;
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {searchResults.map((manual, index) => (
+                  <div key={index} className="border border-gray-200 rounded-lg p-6 hover:bg-gray-50 transition-colors">
+                    <div className="mb-4">
+                      <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                        {manual.nome}
+                      </h3>
+                      <div className="text-sm text-gray-700 space-y-1 mb-3">
+                        <p><span className="font-medium">Codice:</span> {manual.codiceManuale}</p>
+                        <p><span className="font-medium">Revisione:</span> {manual.revisione}</p>
+                      </div>
+                      <p className="text-sm text-gray-600 leading-relaxed">
+                        {manual.descrizione}
+                      </p>
+                    </div>
+
+                    {/* Lingue disponibili */}
+                    <div className="border-t border-gray-100 pt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-3">
+                        Scarica nelle lingue:
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {manual.lingueDisponibili.map((langCode) => {
+                          const isSelected = langCode === selectedLanguage;
+                          return (
+                            <button
+                              key={langCode}
+                              onClick={() => downloadManual(manual, langCode)}
+                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                isSelected
+                                  ? 'text-white shadow-md'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-300'
+                              }`}
+                              style={isSelected ? { backgroundColor: '#007AC2' } : {}}
+                            >
+                              <span className="flex items-center gap-2">
+   
+                                {getLanguageName(langCode)}
+                                <svg 
+                                  className="w-4 h-4" 
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  viewBox="0 0 24 24" 
+                                  xmlns="http://www.w3.org/2000/svg"
+                                >
+                                  <path 
+                                    strokeLinecap="round" 
+                                    strokeLinejoin="round" 
+                                    strokeWidth={2} 
+                                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" 
+                                  />
+                                </svg>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Help Section */}
+        <div className="mt-8 bg-gray-100 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-700 mb-3">
+            Come utilizzare la ricerca
+          </h3>
+          <ul className="text-gray-700 space-y-2">
+            <li className="flex items-start">
+              <span className="text-gray-400 mr-2">1.</span>
+              Inserisci il Serial Number del ventilatore (presente sulla targa identificativa)
+            </li>
+            <li className="flex items-start">
+              <span className="text-gray-400 mr-2">2.</span>
+              Seleziona la lingua desiderata dal menu a tendina
+            </li>
+            <li className="flex items-start">
+              <span className="text-gray-400 mr-2">3.</span>
+              Clicca su &quot;Cerca Manuali&quot; per visualizzare i risultati
+            </li>
+            <li className="flex items-start">
+              <span className="text-gray-400 mr-2">4.</span>
+              Scegli la lingua e scarica il manuale specifico per la tua macchina
+            </li>
+          </ul>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-200 mt-12">
+        <div className="max-w-4xl mx-auto px-4 py-6 text-center text-gray-700">
+          <p>© 2025 Ferrari Ventilatori - Sistema di Ricerca Manuali</p>
+        </div>
       </footer>
     </div>
   );
