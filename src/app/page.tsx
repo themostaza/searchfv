@@ -4,33 +4,16 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
-// Mock data per i risultati
-const mockResults = [
-  {
-    sn: '2504485',
-    codiceManuale: 'MVC_STD',
-    nome: 'Manuale Ventilatore Standard',
-    descrizione: 'Manuale completo per l\'installazione, l\'uso e la manutenzione del ventilatore standard. Include istruzioni dettagliate per il montaggio, le specifiche tecniche e i controlli di sicurezza.',
-    revisione: '001',
-    lingueDisponibili: ['IT', 'EN', 'DE', 'FR']
-  },
-  {
-    sn: '2504485',
-    codiceManuale: 'ROLLOUT',
-    nome: 'Manuale Installazione Rollout',
-    descrizione: 'Guida specifica per l\'installazione del sistema rollout. Contiene schemi di montaggio, dimensioni di ingombro e procedure di collaudo.',
-    revisione: '001',
-    lingueDisponibili: ['IT', 'EN', 'ES']
-  },
-  {
-    sn: '2504485',
-    codiceManuale: 'SWINGOUT',
-    nome: 'Manuale Installazione Swingout',
-    descrizione: 'Istruzioni complete per l\'installazione del sistema swingout. Include dettagli sui meccanismi di apertura e chiusura, manutenzione preventiva e risoluzione problemi.',
-    revisione: '001',
-    lingueDisponibili: ['IT', 'EN', 'DE']
-  }
-];
+// Types for API responses
+interface ManualResult {
+  sn: string;
+  codiceManuale: string;
+  nome: string;
+  descrizione: string;
+  revisione: string;
+  lingueDisponibili: string[];
+  fileUrls?: { [lingua: string]: string };
+}
 
 const lingue = [
   { code: 'IT', name: 'Italiano' },
@@ -46,7 +29,7 @@ export default function ManualSearch() {
   const [selectedLanguage, setSelectedLanguage] = useState('IT');
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [searchResults, setSearchResults] = useState<typeof mockResults>([]);
+  const [searchResults, setSearchResults] = useState<ManualResult[]>([]);
 
   // Gestione parametro URL serial
   useEffect(() => {
@@ -68,23 +51,48 @@ export default function ManualSearch() {
     setIsSearching(true);
     setShowResults(false);
 
-    // Simulazione chiamata API
-    setTimeout(() => {
-      // Filtro mock results in base al serial number
-      const filtered = mockResults.filter(result => 
-        result.sn.includes(searchSN)
-      );
-      
-      setSearchResults(filtered);
+    try {
+      const response = await fetch(`/api/search?serial_number=${encodeURIComponent(searchSN)}&language=${lang || selectedLanguage}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        setSearchResults(data.data || []);
+      } else {
+        console.error('Search error:', data.error);
+        alert('Errore nella ricerca: ' + (data.error || 'Errore sconosciuto'));
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      alert('Errore nella ricerca. Riprova più tardi.');
+      setSearchResults([]);
+    } finally {
       setShowResults(true);
       setIsSearching(false);
-    }, 1000);
+    }
   };
 
-  const downloadManual = (manual: typeof mockResults[0], language: string) => {
-    // Simulazione download - in produzione sarà una chiamata API
-    console.log(`Downloading manual: ${manual.codiceManuale} - ${language}`);
-    alert(`Download del manuale ${manual.codiceManuale} in ${language}`);
+  const downloadManual = async (manual: ManualResult, language: string) => {
+    try {
+      const response = await fetch(`/api/download?codice_manuale=${encodeURIComponent(manual.codiceManuale)}&lingua=${language}&serial_number=${encodeURIComponent(manual.sn)}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        // Create a temporary link and trigger download
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = data.fileName;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        alert('Errore nel download: ' + (data.error || 'File non disponibile'));
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('Errore nel download. Riprova più tardi.');
+    }
   };
 
   const getLanguageName = (code: string) => {
@@ -195,7 +203,7 @@ export default function ManualSearch() {
               </div>
             ) : (
               <div className="space-y-6">
-                {searchResults.map((manual, index) => (
+                {searchResults.map((manual: ManualResult, index: number) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-6 hover:bg-gray-50 transition-colors">
                     <div className="mb-4">
                       <h3 className="text-lg font-semibold text-gray-700 mb-2">
@@ -216,7 +224,7 @@ export default function ManualSearch() {
                         Scarica nelle lingue:
                       </h4>
                       <div className="flex flex-wrap gap-2">
-                        {manual.lingueDisponibili.map((langCode) => {
+                        {manual.lingueDisponibili.map((langCode: string) => {
                           const isSelected = langCode === selectedLanguage;
                           return (
                             <button
