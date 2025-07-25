@@ -15,33 +15,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Find the manual
-    let query = supabase
+    // Find the manual by codice_manuale and lingua
+    // If serial number is provided, we can use it to further filter the codice_manuale
+    let codiceToSearch = codiceManuale;
+    if (serialNumber) {
+      // If a serial number is provided, search for manuals that contain it in their code
+      codiceToSearch = serialNumber;
+    }
+
+    const { data: manuali, error } = await supabase
       .from('manuali')
       .select(`
         id,
         codice_manuale,
         lingua,
-        file_url,
-        prodotto:prodotti(serial_number)
+        file_url
       `)
       .eq('codice_manuale', codiceManuale)
-      .eq('lingua', lingua);
-
-    // If serial number is provided, filter by product
-    if (serialNumber) {
-      const { data: prodotti } = await supabase
-        .from('prodotti')
-        .select('id')
-        .ilike('serial_number', `%${serialNumber}%`);
-
-      if (prodotti && prodotti.length > 0) {
-        const prodottoIds = prodotti.map(p => p.id);
-        query = query.in('prodotto_id', prodottoIds);
-      }
-    }
-
-    const { data: manuali, error } = await query.limit(1);
+      .eq('lingua', lingua)
+      .limit(1);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

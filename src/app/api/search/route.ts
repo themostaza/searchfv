@@ -23,27 +23,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // First, find products with matching serial number
-    const { data: prodotti, error: prodottiError } = await supabase
-      .from('prodotti')
-      .select('id, serial_number, codice_manuale')
-      .ilike('serial_number', `%${serialNumber}%`);
-
-    if (prodottiError) {
-      return NextResponse.json({ error: prodottiError.message }, { status: 400 });
-    }
-
-    if (!prodotti || prodotti.length === 0) {
-      return NextResponse.json({ 
-        data: [],
-        message: 'No products found with the specified serial number'
-      });
-    }
-
-    // Get product IDs
-    const prodottoIds = prodotti.map(p => p.id);
-
-    // Find manuals for these products
+    // Find manuals that match the serial number in their codice_manuale
+    // Since we removed prodotto association, we search directly in the manual's code
     const { data: manuali, error: manualiError } = await supabase
       .from('manuali')
       .select(`
@@ -52,16 +33,20 @@ export async function GET(request: NextRequest) {
         descrizione,
         lingua,
         revisione_code,
-        revisione_order,
-        file_url,
-        prodotto_id,
-        prodotto:prodotti(serial_number, codice_manuale)
+        file_url
       `)
-      .in('prodotto_id', prodottoIds)
-      .order('revisione_order', { ascending: false });
+      .ilike('codice_manuale', `%${serialNumber}%`)
+      .order('created_at', { ascending: false });
 
     if (manualiError) {
       return NextResponse.json({ error: manualiError.message }, { status: 400 });
+    }
+
+    if (!manuali || manuali.length === 0) {
+      return NextResponse.json({ 
+        data: [],
+        message: 'No manuals found with the specified serial number'
+      });
     }
 
     // Group manuals by codice_manuale and return the format expected by the frontend
@@ -72,7 +57,7 @@ export async function GET(request: NextRequest) {
       
       if (!groupedManuali[key]) {
         groupedManuali[key] = {
-          sn: manuale.prodotto?.serial_number || serialNumber,
+          sn: serialNumber,
           codiceManuale: manuale.codice_manuale,
           nome: getManualName(manuale.codice_manuale),
           descrizione: manuale.descrizione || getManualDescription(manuale.codice_manuale),

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import type { ProdottoInsert } from '@/types/supabase';
+import type { TablesInsert } from '@/types/supabase';
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: ProdottoInsert = await request.json();
+    const body: TablesInsert<'prodotti'> = await request.json();
 
     // Validate required fields
     if (!body.serial_number) {

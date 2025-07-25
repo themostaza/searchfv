@@ -100,7 +100,7 @@ export default function ManualSearch() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header className="shadow-sm border-b border-gray-200" style={{ backgroundColor: '#007AC2' }}>
         <div className="max-w-4xl mx-auto px-4 py-6">
@@ -130,7 +130,7 @@ export default function ManualSearch() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-4 py-8 flex-grow">
         {/* Search Form */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -294,7 +294,7 @@ export default function ManualSearch() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-12">
+      <footer className="bg-white border-t border-gray-200 mt-auto">
         <div className="max-w-4xl mx-auto px-4 py-6 text-center text-gray-700">
           <p>© 2025 Ferrari Ventilatori - Sistema di Ricerca Manuali</p>
         </div>

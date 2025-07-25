@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { supabase, uploadFile, deleteFile } from '@/lib/supabase';
-import type { Manuale, ManualeInsert, ManualeUpdate, Prodotto } from '@/types/supabase';
+import type { Tables, TablesInsert, TablesUpdate } from '@/types/supabase';
+
+type Manuale = Tables<'manuali'>;
+type ManualeInsert = TablesInsert<'manuali'>;
+type ManualeUpdate = TablesUpdate<'manuali'>;
 
 const lingue = [
   { code: 'IT', name: 'Italiano' },
@@ -12,9 +16,14 @@ const lingue = [
   { code: 'ES', name: 'Español' }
 ];
 
+interface Notification {
+  type: 'success' | 'error';
+  message: string;
+  show: boolean;
+}
+
 export default function ManualiPage() {
-  const [manuali, setManuali] = useState<(Manuale & { prodotto?: Prodotto })[]>([]);
-  const [prodotti, setProdotti] = useState<Prodotto[]>([]);
+  const [manuali, setManuali] = useState<Manuale[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingManuale, setEditingManuale] = useState<Manuale | null>(null);
@@ -23,12 +32,29 @@ export default function ManualiPage() {
     codice_manuale: '',
     descrizione: '',
     lingua: 'IT',
-    prodotto_id: '',
-    revisione_code: '',
-    revisione_order: 1
+    revisione_code: ''
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLingua, setSelectedLingua] = useState('');
+  const [notification, setNotification] = useState<Notification>({
+    type: 'success',
+    message: '',
+    show: false
+  });
+
+  // Auto-hide notification after 4 seconds
+  useEffect(() => {
+    if (notification.show) {
+      const timer = setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification.show]);
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message, show: true });
+  };
 
   useEffect(() => {
     loadData();
@@ -36,29 +62,17 @@ export default function ManualiPage() {
 
   const loadData = async () => {
     try {
-      // Load prodotti
-      const { data: prodottiData, error: prodottiError } = await supabase
-        .from('prodotti')
-        .select('*')
-        .order('serial_number', { ascending: true });
-
-      if (prodottiError) throw prodottiError;
-      setProdotti(prodottiData || []);
-
-      // Load manuali with prodotti data
+      // Load manuali
       const { data: manualiData, error: manualiError } = await supabase
         .from('manuali')
-        .select(`
-          *,
-          prodotto:prodotti(*)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (manualiError) throw manualiError;
-      setManuali((manualiData as (Manuale & { prodotto?: Prodotto })[]) || []);
+      setManuali(manualiData || []);
     } catch (error) {
       console.error('Error loading data:', error);
-      alert('Errore nel caricamento dei dati');
+      showNotification('error', 'Errore nel caricamento dei dati');
     } finally {
       setLoading(false);
     }
@@ -66,12 +80,12 @@ export default function ManualiPage() {
 
   const handleFileUpload = async (file: File): Promise<string | null> => {
     if (!file.type.includes('pdf')) {
-      alert('Seleziona un file PDF');
+      showNotification('error', 'Seleziona un file PDF');
       return null;
     }
 
     if (file.size > 10 * 1024 * 1024) { // 10MB limit
-      alert('Il file deve essere inferiore a 10MB');
+      showNotification('error', 'Il file deve essere inferiore a 10MB');
       return null;
     }
 
@@ -81,11 +95,16 @@ export default function ManualiPage() {
       const fileName = `${formData.codice_manuale}_${formData.lingua}_${timestamp}.pdf`;
       const filePath = `manuali/${fileName}`;
       
+      console.log('Starting file upload:', { fileName, filePath });
       const fileUrl = await uploadFile(file, filePath);
+      console.log('File upload completed:', fileUrl);
       return fileUrl;
     } catch (error) {
       console.error('Error uploading file:', error);
-      alert('Errore nell\'upload del file');
+      
+      // Show more detailed error message
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto nell\'upload';
+      showNotification('error', `Errore nell'upload del file: ${errorMessage}`);
       return null;
     } finally {
       setUploadingFile(false);
@@ -109,9 +128,14 @@ export default function ManualiPage() {
         
         // Delete old file if updating
         if (editingManuale?.file_url) {
-          const oldPath = editingManuale.file_url.split('/').pop();
-          if (oldPath) {
-            await deleteFile(`manuali/${oldPath}`);
+          try {
+            const oldPath = editingManuale.file_url.split('/').pop();
+            if (oldPath) {
+              await deleteFile(`manuali/${oldPath}`);
+            }
+          } catch (error) {
+            console.warn('Could not delete old file:', error);
+            // Continue with upload anyway
           }
         }
         
@@ -122,9 +146,7 @@ export default function ManualiPage() {
         codice_manuale: formData.codice_manuale,
         descrizione: formData.descrizione,
         lingua: formData.lingua,
-        prodotto_id: formData.prodotto_id || null,
         revisione_code: formData.revisione_code,
-        revisione_order: formData.revisione_order,
         file_url: fileUrl
       };
 
@@ -136,7 +158,7 @@ export default function ManualiPage() {
           .eq('id', editingManuale.id);
 
         if (error) throw error;
-        alert('Manuale aggiornato con successo!');
+        showNotification('success', 'Manuale aggiornato con successo!');
       } else {
         // Create new manual
         const { error } = await supabase
@@ -144,14 +166,15 @@ export default function ManualiPage() {
           .insert(saveData as ManualeInsert);
 
         if (error) throw error;
-        alert('Manuale creato con successo!');
+        showNotification('success', 'Manuale creato con successo!');
       }
 
       resetForm();
       loadData();
     } catch (error) {
       console.error('Error saving manuale:', error);
-      alert('Errore nel salvataggio del manuale');
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      showNotification('error', `Errore nel salvataggio del manuale: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -163,9 +186,7 @@ export default function ManualiPage() {
       codice_manuale: manuale.codice_manuale,
       descrizione: manuale.descrizione,
       lingua: manuale.lingua,
-      prodotto_id: manuale.prodotto_id,
-      revisione_code: manuale.revisione_code,
-      revisione_order: manuale.revisione_order
+      revisione_code: manuale.revisione_code
     });
     setShowForm(true);
   };
@@ -176,9 +197,14 @@ export default function ManualiPage() {
     try {
       // Delete file from storage
       if (manuale.file_url) {
-        const fileName = manuale.file_url.split('/').pop();
-        if (fileName) {
-          await deleteFile(`manuali/${fileName}`);
+        try {
+          const fileName = manuale.file_url.split('/').pop();
+          if (fileName) {
+            await deleteFile(`manuali/${fileName}`);
+          }
+        } catch (error) {
+          console.warn('Could not delete file from storage:', error);
+          // Continue with database deletion
         }
       }
 
@@ -189,11 +215,12 @@ export default function ManualiPage() {
         .eq('id', manuale.id);
 
       if (error) throw error;
-      alert('Manuale eliminato con successo!');
+      showNotification('success', 'Manuale eliminato con successo!');
       loadData();
     } catch (error) {
       console.error('Error deleting manuale:', error);
-      alert('Errore nell\'eliminazione del manuale');
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      showNotification('error', `Errore nell'eliminazione del manuale: ${errorMessage}`);
     }
   };
 
@@ -212,9 +239,7 @@ export default function ManualiPage() {
       codice_manuale: '',
       descrizione: '',
       lingua: 'IT',
-      prodotto_id: '',
-      revisione_code: '',
-      revisione_order: 1
+      revisione_code: ''
     });
     setEditingManuale(null);
     setShowForm(false);
@@ -230,24 +255,59 @@ export default function ManualiPage() {
     return matchesSearch && matchesLingua;
   });
 
-  return (
-    <div className="max-w-7xl mx-auto space-y-6 pt-2">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Gestione Manuali</h1>
-            <p className="text-gray-700">Gestisci i manuali PDF e i loro metadati</p>
-          </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 text-white rounded-lg font-medium hover:opacity-90 transition-all"
-            style={{ backgroundColor: '#007AC2' }}
-          >
-            + Aggiungi Manuale
-          </button>
-        </div>
+      return (
+      <div className="max-w-7xl mx-auto space-y-6 pt-2">
+          {/* Notification Toast */}
+          {notification.show && (
+            <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${
+              notification.type === 'success' 
+                ? 'bg-green-500 text-white' 
+                : 'bg-red-500 text-white'
+            }`}>
+              <div className="flex items-center">
+                {notification.type === 'success' ? (
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                )}
+                <span className="text-sm font-medium">{notification.message}</span>
+                <button
+                  onClick={() => setNotification(prev => ({ ...prev, show: false }))}
+                  className="ml-4 text-white hover:text-gray-200"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
 
-        {/* Filters */}
+          {/* Header */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Gestione Manuali</h1>
+                <p className="text-gray-700 mt-2">Gestisci i manuali PDF e i loro metadati</p>
+              </div>
+              <button
+                onClick={() => setShowForm(true)}
+                className="inline-flex items-center px-6 py-3 text-white rounded-lg font-medium hover:opacity-90 transition-all shadow-md"
+                style={{ backgroundColor: '#007AC2' }}
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Aggiungi Manuale
+              </button>
+            </div>
+          </div>
+
+        {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
@@ -295,9 +355,6 @@ export default function ManualiPage() {
                     Lingua
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Prodotto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     File
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -308,7 +365,7 @@ export default function ManualiPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-4 text-center">
+                    <td colSpan={5} className="px-6 py-4 text-center">
                       <div className="flex justify-center">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       </div>
@@ -330,9 +387,6 @@ export default function ManualiPage() {
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                           {manuale.lingua || 'N/A'}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        {manuale.prodotto?.serial_number || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {manuale.file_url ? (
@@ -367,7 +421,7 @@ export default function ManualiPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-4 text-center text-gray-700">
+                    <td colSpan={5} className="px-6 py-4 text-center text-gray-700">
                       Nessun manuale trovato
                     </td>
                   </tr>
@@ -437,48 +491,15 @@ export default function ManualiPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Prodotto Associato
+                    Codice Revisione
                   </label>
-                  <select
-                    value={formData.prodotto_id || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, prodotto_id: e.target.value }))}
-                    className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white text-gray-700"
-                  >
-                    <option value="">Seleziona un prodotto...</option>
-                    {prodotti.map((prodotto) => (
-                      <option key={prodotto.id} value={prodotto.id}>
-                        {prodotto.serial_number} - {prodotto.codice_manuale}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Codice Revisione
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.revisione_code || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, revisione_code: e.target.value }))}
-                      className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-500"
-                      placeholder="es. 001"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Ordine Revisione
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.revisione_order || 1}
-                      onChange={(e) => setFormData(prev => ({ ...prev, revisione_order: parseInt(e.target.value) }))}
-                      className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    value={formData.revisione_code || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, revisione_code: e.target.value }))}
+                    className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-500"
+                    placeholder="es. 001"
+                  />
                 </div>
 
                 <div>

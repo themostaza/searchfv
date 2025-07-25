@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Prodotto, Manuale } from '@/types/supabase';
+import type { Tables } from '@/types/supabase';
+
+type Prodotto = Tables<'prodotti'>;
+type Manuale = Tables<'manuali'>;
 
 interface Stats {
   totalProdotti: number;
   totalManuali: number;
+  totalDownloads: number;
   manualiPerLingua: { [key: string]: number };
   recentProdotti: Prodotto[];
   recentManuali: Manuale[];
@@ -16,6 +20,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalProdotti: 0,
     totalManuali: 0,
+    totalDownloads: 0,
     manualiPerLingua: {},
     recentProdotti: [],
     recentManuali: []
@@ -37,6 +42,10 @@ export default function AdminDashboard() {
       const { count: manualiCount } = await supabase
         .from('manuali')
         .select('*', { count: 'exact', head: true });
+
+      // TODO: Implementare conteggio downloads reali
+      // Per ora usiamo un valore mock
+      const totalDownloads = 142; // Placeholder per ora
 
       // Manuali per lingua
       const { data: manualiData } = await supabase
@@ -66,6 +75,7 @@ export default function AdminDashboard() {
       setStats({
         totalProdotti: prodottiCount || 0,
         totalManuali: manualiCount || 0,
+        totalDownloads,
         manualiPerLingua,
         recentProdotti: recentProdotti || [],
         recentManuali: recentManuali || []
@@ -94,7 +104,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-l-4" style={{ borderLeftColor: '#007AC2' }}>
           <div className="flex items-center justify-between">
             <div>
@@ -118,6 +128,20 @@ export default function AdminDashboard() {
             <div className="p-3 rounded-full bg-green-100">
               <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-l-4 border-l-orange-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">Downloads Totali</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.totalDownloads}</p>
+            </div>
+            <div className="p-3 rounded-full bg-orange-100">
+              <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
           </div>

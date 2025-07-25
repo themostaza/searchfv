@@ -47,9 +47,7 @@ export type Database = {
           file_url: string | null
           id: string
           lingua: string | null
-          prodotto_id: string | null
           revisione_code: string | null
-          revisione_order: number | null
         }
         Insert: {
           codice_manuale?: string | null
@@ -58,9 +56,7 @@ export type Database = {
           file_url?: string | null
           id?: string
           lingua?: string | null
-          prodotto_id?: string | null
           revisione_code?: string | null
-          revisione_order?: number | null
         }
         Update: {
           codice_manuale?: string | null
@@ -69,19 +65,9 @@ export type Database = {
           file_url?: string | null
           id?: string
           lingua?: string | null
-          prodotto_id?: string | null
           revisione_code?: string | null
-          revisione_order?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "manuali_prodotto_id_fkey"
-            columns: ["prodotto_id"]
-            isOneToOne: false
-            referencedRelation: "prodotti"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       prodotti: {
         Row: {
@@ -89,7 +75,6 @@ export type Database = {
           created_at: string
           id: string
           revisione_code: string | null
-          revisione_order: number | null
           serial_number: string | null
         }
         Insert: {
@@ -97,7 +82,6 @@ export type Database = {
           created_at?: string
           id?: string
           revisione_code?: string | null
-          revisione_order?: number | null
           serial_number?: string | null
         }
         Update: {
@@ -105,7 +89,6 @@ export type Database = {
           created_at?: string
           id?: string
           revisione_code?: string | null
-          revisione_order?: number | null
           serial_number?: string | null
         }
         Relationships: []
@@ -251,11 +234,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
-// Tipi di utilità per le tabelle
-export type Prodotto = Tables<'prodotti'>;
-export type Manuale = Tables<'manuali'>;
-export type ProdottoInsert = TablesInsert<'prodotti'>;
-export type ManualeInsert = TablesInsert<'manuali'>;
-export type ProdottoUpdate = TablesUpdate<'prodotti'>;
-export type ManualeUpdate = TablesUpdate<'manuali'>; 

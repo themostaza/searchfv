@@ -23,37 +23,56 @@ export const isAdmin = async (userId: string): Promise<boolean> => {
 };
 
 // Utility per l'upload di file
-export const uploadFile = async (file: File, path: string): Promise<string | null> => {
-  const { data, error } = await supabase.storage
-    .from('files')
-    .upload(path, file, {
-      cacheControl: '3600',
-      upsert: false
-    });
+export const uploadFile = async (file: File, path: string): Promise<string> => {
+  try {
+    console.log('Uploading file:', { fileName: file.name, path, size: file.size });
 
-  if (error) {
-    console.error('Error uploading file:', error);
-    return null;
+    const { data, error } = await supabase.storage
+      .from('files')
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Supabase storage error:', error);
+      throw new Error(`Upload failed: ${error.message}`);
+    }
+
+    if (!data) {
+      throw new Error('Upload failed: No data returned');
+    }
+
+    // Ottieni l'URL pubblico del file
+    const { data: { publicUrl } } = supabase.storage
+      .from('files')
+      .getPublicUrl(data.path);
+
+    console.log('File uploaded successfully:', publicUrl);
+    return publicUrl;
+  } catch (error) {
+    console.error('Error in uploadFile function:', error);
+    throw error;
   }
-
-  // Ottieni l'URL pubblico del file
-  const { data: { publicUrl } } = supabase.storage
-    .from('files')
-    .getPublicUrl(data.path);
-
-  return publicUrl;
 };
 
 // Utility per eliminare file
-export const deleteFile = async (path: string): Promise<boolean> => {
-  const { error } = await supabase.storage
-    .from('files')
-    .remove([path]);
+export const deleteFile = async (path: string): Promise<void> => {
+  try {
+    console.log('Deleting file:', path);
+    
+    const { error } = await supabase.storage
+      .from('files')
+      .remove([path]);
 
-  if (error) {
-    console.error('Error deleting file:', error);
-    return false;
+    if (error) {
+      console.error('Supabase storage delete error:', error);
+      throw new Error(`Delete failed: ${error.message}`);
+    }
+
+    console.log('File deleted successfully:', path);
+  } catch (error) {
+    console.error('Error in deleteFile function:', error);
+    throw error;
   }
-
-  return true;
 }; 

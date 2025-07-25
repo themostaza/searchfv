@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import type { ProdottoUpdate } from '@/types/supabase';
+import type { TablesUpdate } from '@/types/supabase';
 
 export async function GET(
   request: NextRequest,
@@ -39,7 +39,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const body: ProdottoUpdate = await request.json();
+    const body: TablesUpdate<'prodotti'> = await request.json();
 
     // Check if product exists
     const { data: existing } = await supabase
@@ -98,20 +98,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    // Check if product has associated manuals
-    const { data: manuali } = await supabase
-      .from('manuali')
-      .select('id')
-      .eq('prodotto_id', id)
-      .limit(1);
-
-    if (manuali && manuali.length > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete product with associated manuals' },
-        { status: 409 }
-      );
-    }
-
+    
     // Check if product exists
     const { data: existing } = await supabase
       .from('prodotti')

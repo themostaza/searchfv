@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Prodotto, ProdottoInsert, ProdottoUpdate } from '@/types/supabase';
+import type { Tables, TablesInsert, TablesUpdate } from '@/types/supabase';
+
+type Prodotto = Tables<'prodotti'>;
+type ProdottoInsert = TablesInsert<'prodotti'>;
+type ProdottoUpdate = TablesUpdate<'prodotti'>;
 
 export default function ProdottiPage() {
   const [prodotti, setProdotti] = useState<Prodotto[]>([]);
@@ -13,7 +17,6 @@ export default function ProdottiPage() {
     serial_number: '',
     codice_manuale: '',
     revisione_code: '',
-    revisione_order: 1
   });
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -78,7 +81,6 @@ export default function ProdottiPage() {
       serial_number: prodotto.serial_number,
       codice_manuale: prodotto.codice_manuale,
       revisione_code: prodotto.revisione_code,
-      revisione_order: prodotto.revisione_order
     });
     setShowForm(true);
   };
@@ -106,7 +108,6 @@ export default function ProdottiPage() {
       serial_number: '',
       codice_manuale: '',
       revisione_code: '',
-      revisione_order: 1
     });
     setEditingProdotto(null);
     setShowForm(false);
@@ -120,13 +121,13 @@ export default function ProdottiPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pt-2">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Gestione Prodotti</h1>
+        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Gestione Prodotti</h1>
               <p className="text-gray-700 mt-2">Gestisci i prodotti e i loro serial number</p>
             </div>
-            <button
+            {/* <button
               onClick={() => setShowForm(true)}
               className="inline-flex items-center px-6 py-3 text-white rounded-lg font-medium hover:opacity-90 transition-all shadow-md"
               style={{ backgroundColor: '#007AC2' }}
@@ -135,7 +136,7 @@ export default function ProdottiPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Aggiungi Prodotto
-            </button>
+            </button> */}
           </div>
         </div>
 
@@ -175,15 +176,15 @@ export default function ProdottiPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Data Creazione
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {/* <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Azioni
-                  </th>
+                  </th> */}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center">
+                    <td colSpan={4} className="px-6 py-4 text-center">
                       <div className="flex justify-center">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       </div>
@@ -200,12 +201,11 @@ export default function ProdottiPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {prodotto.revisione_code || 'N/A'} 
-                        {prodotto.revisione_order && ` (${prodotto.revisione_order})`}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {new Date(prodotto.created_at).toLocaleDateString('it-IT')}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      {/* <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                         <button
                           onClick={() => handleEdit(prodotto)}
                           className="text-blue-600 hover:text-blue-900 transition-colors"
@@ -218,12 +218,12 @@ export default function ProdottiPage() {
                         >
                           Elimina
                         </button>
-                      </td>
+                      </td> */}
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-gray-700">
+                    <td colSpan={4} className="px-6 py-4 text-center text-gray-700">
                       Nessun prodotto trovato
                     </td>
                   </tr>
@@ -291,8 +291,8 @@ export default function ProdottiPage() {
                   <input
                     type="number"
                     min="1"
-                    value={formData.revisione_order || 1}
-                    onChange={(e) => setFormData(prev => ({ ...prev, revisione_order: parseInt(e.target.value) }))}
+                    value={formData.revisione_code || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, revisione_code: e.target.value }))}
                     className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
                   />
                 </div>
