@@ -23,64 +23,99 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Find manuals that match the serial number in their codice_manuale
-    // Since we removed prodotto association, we search directly in the manual's code
-    const { data: manuali, error: manualiError } = await supabase
-      .from('manuali')
+    // Step 1: Cerca il prodotto nella tabella prodotti usando il serial_number
+    const { data: prodotti, error: prodottiError } = await supabase
+      .from('prodotti')
       .select(`
         id,
+        serial_number,
         codice_manuale,
-        descrizione,
-        lingua,
-        revisione_code,
-        file_url
+        revisione_code
       `)
-      .ilike('codice_manuale', `%${serialNumber}%`)
-      .order('created_at', { ascending: false });
+      .eq('serial_number', serialNumber);
 
-    if (manualiError) {
-      return NextResponse.json({ error: manualiError.message }, { status: 400 });
+    if (prodottiError) {
+      return NextResponse.json({ error: prodottiError.message }, { status: 400 });
     }
 
-    if (!manuali || manuali.length === 0) {
+    if (!prodotti || prodotti.length === 0) {
       return NextResponse.json({ 
         data: [],
-        message: 'No manuals found with the specified serial number'
+        message: 'No product found with the specified serial number'
       });
     }
 
-    // Group manuals by codice_manuale and return the format expected by the frontend
-    const groupedManuali: { [key: string]: GroupedManuale } = {};
+    // Step 2: Per ogni prodotto trovato, cerca i manuali correlati
+    const allResults: GroupedManuale[] = [];
 
-    manuali?.forEach(manuale => {
-      const key = manuale.codice_manuale || 'unknown';
-      
-      if (!groupedManuali[key]) {
-        groupedManuali[key] = {
-          sn: serialNumber,
-          codiceManuale: manuale.codice_manuale,
-          nome: getManualName(manuale.codice_manuale),
-          descrizione: manuale.descrizione || getManualDescription(manuale.codice_manuale),
-          revisione: manuale.revisione_code || '001',
-          lingueDisponibili: [],
-          fileUrls: {}
-        };
+    for (const prodotto of prodotti) {
+      if (!prodotto.codice_manuale) {
+        continue; // Salta i prodotti senza codice manuale
       }
 
-      // Add language if not already present
-      if (manuale.lingua && !groupedManuali[key].lingueDisponibili.includes(manuale.lingua)) {
-        groupedManuali[key].lingueDisponibili.push(manuale.lingua);
-        if (manuale.file_url) {
-          groupedManuali[key].fileUrls[manuale.lingua] = manuale.file_url;
+      // Cerca i manuali che corrispondono al codice_manuale e revisione_code del prodotto
+      let manualiQuery = supabase
+        .from('manuali')
+        .select(`
+          id,
+          codice_manuale,
+          descrizione,
+          lingua,
+          revisione_code,
+          file_url
+        `)
+        .eq('codice_manuale', prodotto.codice_manuale);
+
+      // Se il prodotto ha un revisione_code, filtra anche per quello
+      if (prodotto.revisione_code) {
+        manualiQuery = manualiQuery.eq('revisione_code', prodotto.revisione_code);
+      }
+
+      const { data: manuali, error: manualiError } = await manualiQuery
+        .order('created_at', { ascending: false });
+
+      if (manualiError) {
+        console.error('Error fetching manuals:', manualiError.message);
+        continue; // Continua con il prossimo prodotto
+      }
+
+      if (!manuali || manuali.length === 0) {
+        continue; // Nessun manuale trovato per questo prodotto
+      }
+
+      // Raggruppa i manuali per codice_manuale
+      const groupedManuali: { [key: string]: GroupedManuale } = {};
+
+      manuali.forEach(manuale => {
+        const key = manuale.codice_manuale || 'unknown';
+        
+        if (!groupedManuali[key]) {
+          groupedManuali[key] = {
+            sn: serialNumber,
+            codiceManuale: manuale.codice_manuale,
+            nome: getManualName(manuale.codice_manuale),
+            descrizione: manuale.descrizione || getManualDescription(manuale.codice_manuale),
+            revisione: manuale.revisione_code || prodotto.revisione_code || '001',
+            lingueDisponibili: [],
+            fileUrls: {}
+          };
         }
-      }
-    });
 
-    // Convert to array format
-    const results = Object.values(groupedManuali);
+        // Aggiungi lingua se non già presente
+        if (manuale.lingua && !groupedManuali[key].lingueDisponibili.includes(manuale.lingua)) {
+          groupedManuali[key].lingueDisponibili.push(manuale.lingua);
+          if (manuale.file_url) {
+            groupedManuali[key].fileUrls[manuale.lingua] = manuale.file_url;
+          }
+        }
+      });
+
+      // Aggiungi i risultati di questo prodotto
+      allResults.push(...Object.values(groupedManuali));
+    }
 
     return NextResponse.json({ 
-      data: results,
+      data: allResults,
       searchTerm: serialNumber
     });
 

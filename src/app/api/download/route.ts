@@ -8,32 +8,57 @@ export async function GET(request: NextRequest) {
     const lingua = searchParams.get('lingua');
     const serialNumber = searchParams.get('serial_number');
 
-    if (!codiceManuale || !lingua) {
+    if (!codiceManuale || !lingua || !serialNumber) {
       return NextResponse.json(
-        { error: 'Codice manuale and lingua are required' },
+        { error: 'Codice manuale, lingua, and serial number are required' },
         { status: 400 }
       );
     }
 
-    // Find the manual by codice_manuale and lingua
-    // If serial number is provided, we can use it to further filter the codice_manuale
-    let codiceToSearch = codiceManuale;
-    if (serialNumber) {
-      // If a serial number is provided, search for manuals that contain it in their code
-      codiceToSearch = serialNumber;
+    // Step 1: Verifica che il prodotto esista e ottieni le sue informazioni
+    const { data: prodotti, error: prodottiError } = await supabase
+      .from('prodotti')
+      .select(`
+        id,
+        serial_number,
+        codice_manuale,
+        revisione_code
+      `)
+      .eq('serial_number', serialNumber)
+      .eq('codice_manuale', codiceManuale);
+
+    if (prodottiError) {
+      return NextResponse.json({ error: prodottiError.message }, { status: 400 });
     }
 
-    const { data: manuali, error } = await supabase
+    if (!prodotti || prodotti.length === 0) {
+      return NextResponse.json(
+        { error: 'Product not found with specified serial number and manual code' },
+        { status: 404 }
+      );
+    }
+
+    const prodotto = prodotti[0];
+
+    // Step 2: Cerca il manuale specifico usando codice_manuale, revisione_code e lingua
+    let manualeQuery = supabase
       .from('manuali')
       .select(`
         id,
         codice_manuale,
         lingua,
+        revisione_code,
         file_url
       `)
       .eq('codice_manuale', codiceManuale)
-      .eq('lingua', lingua)
-      .limit(1);
+      .eq('lingua', lingua);
+
+    // Se il prodotto ha un revisione_code, filtra anche per quello
+    if (prodotto.revisione_code) {
+      manualeQuery = manualeQuery.eq('revisione_code', prodotto.revisione_code);
+    }
+
+    const { data: manuali, error } = await manualeQuery.limit(1);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
@@ -41,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     if (!manuali || manuali.length === 0) {
       return NextResponse.json(
-        { error: 'Manual not found' },
+        { error: 'Manual not found for the specified product, language and revision' },
         { status: 404 }
       );
     }
@@ -56,19 +81,21 @@ export async function GET(request: NextRequest) {
     }
 
     // Log the download (optional - for analytics)
-    console.log(`Download requested: ${codiceManuale} - ${lingua} - ${serialNumber || 'N/A'}`);
+    console.log(`Download requested: ${codiceManuale} - ${lingua} - ${serialNumber} - Rev: ${prodotto.revisione_code || 'N/A'}`);
 
     // Return the file URL for client-side download
-    // In a production environment, you might want to:
-    // 1. Generate a temporary signed URL
-    // 2. Track downloads in a separate table
-    // 3. Implement rate limiting
     return NextResponse.json({
       downloadUrl: manuale.file_url,
-      fileName: `${codiceManuale}_${lingua}.pdf`,
+      fileName: `${codiceManuale}_${lingua}_${prodotto.revisione_code || 'Rev001'}.pdf`,
       manuale: {
         codice_manuale: manuale.codice_manuale,
-        lingua: manuale.lingua
+        lingua: manuale.lingua,
+        revisione_code: manuale.revisione_code
+      },
+      prodotto: {
+        serial_number: prodotto.serial_number,
+        codice_manuale: prodotto.codice_manuale,
+        revisione_code: prodotto.revisione_code
       }
     });
 
