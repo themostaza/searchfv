@@ -104,7 +104,7 @@ export default function ManualSearch() {
       {/* Header */}
       <header className="shadow-sm border-b border-gray-200" style={{ backgroundColor: '#007AC2' }}>
         <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center gap-4">
             {/* Logo Ferrari */}
             <div className="flex-shrink-0">
               <Image
