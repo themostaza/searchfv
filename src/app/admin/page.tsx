@@ -11,9 +11,21 @@ interface Stats {
   totalProdotti: number;
   totalManuali: number;
   totalDownloads: number;
+  totalSearches: number;
+  downloadStats: {
+    successful: number;
+    failed: number;
+    todayCount: number;
+  };
+  searchStats: {
+    successful: number;
+    noResults: number;
+    todayCount: number;
+  };
   manualiPerLingua: { [key: string]: number };
   recentProdotti: Prodotto[];
   recentManuali: Manuale[];
+  topSearchedSerials: { serial: string; count: number }[];
 }
 
 export default function AdminDashboard() {
@@ -21,9 +33,21 @@ export default function AdminDashboard() {
     totalProdotti: 0,
     totalManuali: 0,
     totalDownloads: 0,
+    totalSearches: 0,
+    downloadStats: {
+      successful: 0,
+      failed: 0,
+      todayCount: 0
+    },
+    searchStats: {
+      successful: 0,
+      noResults: 0,
+      todayCount: 0
+    },
     manualiPerLingua: {},
     recentProdotti: [],
-    recentManuali: []
+    recentManuali: [],
+    topSearchedSerials: []
   });
   const [loading, setLoading] = useState(true);
 
@@ -43,9 +67,68 @@ export default function AdminDashboard() {
         .from('manuali')
         .select('*', { count: 'exact', head: true });
 
-      // TODO: Implementare conteggio downloads reali
-      // Per ora usiamo un valore mock
-      const totalDownloads = 142; // Placeholder per ora
+      // Conta ricerche totali
+      const { count: searchesCount } = await supabase
+        .from('searches')
+        .select('*', { count: 'exact', head: true });
+
+      // Conta download totali
+      const { count: downloadsCount } = await supabase
+        .from('download')
+        .select('*', { count: 'exact', head: true });
+
+      // Statistiche ricerche
+      const today = new Date().toISOString().split('T')[0];
+      
+      const { count: successfulSearches } = await supabase
+        .from('searches')
+        .select('*', { count: 'exact', head: true })
+        .eq('body->search_result', 'success');
+
+      const { count: noResultSearches } = await supabase
+        .from('searches')
+        .select('*', { count: 'exact', head: true })
+        .eq('body->search_result', 'no_product_found');
+
+      const { count: todaySearches } = await supabase
+        .from('searches')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today + 'T00:00:00');
+
+      // Statistiche download
+      const { count: successfulDownloads } = await supabase
+        .from('download')
+        .select('*', { count: 'exact', head: true })
+        .eq('body->download_result', 'success');
+
+      const { count: failedDownloads } = await supabase
+        .from('download')
+        .select('*', { count: 'exact', head: true })
+        .neq('body->download_result', 'success');
+
+      const { count: todayDownloads } = await supabase
+        .from('download')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today + 'T00:00:00');
+
+      // Top serial numbers cercati
+      const { data: searchData } = await supabase
+        .from('searches')
+        .select('serial_searched')
+        .not('serial_searched', 'is', null)
+        .limit(1000);
+
+      const serialCounts: { [key: string]: number } = {};
+      searchData?.forEach((search) => {
+        if (search.serial_searched) {
+          serialCounts[search.serial_searched] = (serialCounts[search.serial_searched] || 0) + 1;
+        }
+      });
+
+      const topSearchedSerials = Object.entries(serialCounts)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 5)
+        .map(([serial, count]) => ({ serial, count }));
 
       // Manuali per lingua
       const { data: manualiData } = await supabase
@@ -75,10 +158,22 @@ export default function AdminDashboard() {
       setStats({
         totalProdotti: prodottiCount || 0,
         totalManuali: manualiCount || 0,
-        totalDownloads,
+        totalDownloads: downloadsCount || 0,
+        totalSearches: searchesCount || 0,
+        downloadStats: {
+          successful: successfulDownloads || 0,
+          failed: failedDownloads || 0,
+          todayCount: todayDownloads || 0
+        },
+        searchStats: {
+          successful: successfulSearches || 0,
+          noResults: noResultSearches || 0,
+          todayCount: todaySearches || 0
+        },
         manualiPerLingua,
         recentProdotti: recentProdotti || [],
-        recentManuali: recentManuali || []
+        recentManuali: recentManuali || [],
+        topSearchedSerials
       });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -133,11 +228,27 @@ export default function AdminDashboard() {
           </div>
         </div>
 
+        <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-l-4 border-l-indigo-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">Ricerche Totali</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.totalSearches}</p>
+              <p className="text-xs text-gray-500 mt-1">Oggi: {stats.searchStats.todayCount}</p>
+            </div>
+            <div className="p-3 rounded-full bg-indigo-100">
+              <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-l-4 border-l-orange-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 mb-1">Downloads Totali</p>
               <p className="text-3xl font-bold text-gray-900">{stats.totalDownloads}</p>
+              <p className="text-xs text-gray-500 mt-1">Oggi: {stats.downloadStats.todayCount}</p>
             </div>
             <div className="p-3 rounded-full bg-orange-100">
               <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,24 +271,10 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
-
-        <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-l-4 border-l-emerald-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Sistema</p>
-              <p className="text-3xl font-bold text-emerald-600">Online</p>
-            </div>
-            <div className="p-3 rounded-full bg-emerald-100">
-              <svg className="w-8 h-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Charts/Tables Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Manuali per Lingua */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center justify-between mb-6">
@@ -212,6 +309,48 @@ export default function AdminDashboard() {
               <div className="text-center py-8">
                 <div className="text-gray-400 text-4xl mb-2">📊</div>
                 <p className="text-gray-500">Nessun manuale ancora caricato</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Serial Numbers più Cercati */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-semibold text-gray-900">Serial Più Cercati</h3>
+            <div className="text-sm text-gray-500">
+              Top 5 ricerche
+            </div>
+          </div>
+          <div className="space-y-4">
+            {stats.topSearchedSerials.length > 0 ? (
+              stats.topSearchedSerials.map((item, index) => (
+                <div key={item.serial} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                      <span className="text-sm font-bold text-indigo-600">#{index + 1}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-900">{item.serial}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-16 h-2 bg-gray-200 rounded-full">
+                      <div
+                        className="h-2 rounded-full transition-all duration-300 bg-indigo-500"
+                        style={{
+                          width: `${stats.topSearchedSerials.length > 0 ? (item.count / stats.topSearchedSerials[0].count) * 100 : 0}%`
+                        }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 w-6 text-right">{item.count}</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <div className="text-gray-400 text-4xl mb-2">🔢</div>
+                <p className="text-gray-500">Nessuna ricerca ancora effettuata</p>
               </div>
             )}
           </div>

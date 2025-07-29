@@ -12,33 +12,37 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "12.2.12 (cd3cf9e)"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          operationName?: string
-          query?: string
-          variables?: Json
-          extensions?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
+      download: {
+        Row: {
+          body: Json | null
+          created_at: string
+          id: string
+          manuale_id: string | null
+        }
+        Insert: {
+          body?: Json | null
+          created_at?: string
+          id?: string
+          manuale_id?: string | null
+        }
+        Update: {
+          body?: Json | null
+          created_at?: string
+          id?: string
+          manuale_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "download_manuale_id_fkey"
+            columns: ["manuale_id"]
+            isOneToOne: false
+            referencedRelation: "manuali"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       manuali: {
         Row: {
           codice_manuale: string | null
@@ -90,6 +94,27 @@ export type Database = {
           id?: string
           revisione_code?: string | null
           serial_number?: string | null
+        }
+        Relationships: []
+      }
+      searches: {
+        Row: {
+          body: Json | null
+          created_at: string
+          id: string
+          serial_searched: string | null
+        }
+        Insert: {
+          body?: Json | null
+          created_at?: string
+          id?: string
+          serial_searched?: string | null
+        }
+        Update: {
+          body?: Json | null
+          created_at?: string
+          id?: string
+          serial_searched?: string | null
         }
         Relationships: []
       }
@@ -227,9 +252,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

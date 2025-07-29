@@ -12,10 +12,10 @@ interface GroupedManuale {
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const serialNumber = searchParams.get('serial_number');
+  const { searchParams } = new URL(request.url);
+  const serialNumber = searchParams.get('serial_number');
 
+  try {
     if (!serialNumber) {
       return NextResponse.json(
         { error: 'Serial number is required' },
@@ -39,6 +39,22 @@ export async function GET(request: NextRequest) {
     }
 
     if (!prodotti || prodotti.length === 0) {
+      // Salva la ricerca senza risultati
+      const searchData = {
+        serial_searched: serialNumber,
+        body: {
+          request_timestamp: new Date().toISOString(),
+          user_agent: request.headers.get('user-agent'),
+          ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+          search_result: 'no_product_found',
+          products_found: 0,
+          manuals_found: 0,
+          search_params: Object.fromEntries(searchParams.entries())
+        }
+      };
+
+      await supabase.from('searches').insert(searchData);
+
       return NextResponse.json({ 
         data: [],
         message: 'No product found with the specified serial number'
@@ -47,6 +63,7 @@ export async function GET(request: NextRequest) {
 
     // Step 2: Per ogni prodotto trovato, cerca i manuali correlati
     const allResults: GroupedManuale[] = [];
+    let totalManualsFound = 0;
 
     for (const prodotto of prodotti) {
       if (!prodotto.codice_manuale) {
@@ -83,6 +100,8 @@ export async function GET(request: NextRequest) {
         continue; // Nessun manuale trovato per questo prodotto
       }
 
+      totalManualsFound += manuali.length;
+
       // Raggruppa i manuali per codice_manuale
       const groupedManuali: { [key: string]: GroupedManuale } = {};
 
@@ -114,6 +133,34 @@ export async function GET(request: NextRequest) {
       allResults.push(...Object.values(groupedManuali));
     }
 
+    // Salva la ricerca con risultati
+    const searchData = {
+      serial_searched: serialNumber,
+      body: {
+        request_timestamp: new Date().toISOString(),
+        user_agent: request.headers.get('user-agent'),
+        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+        search_result: 'success',
+        products_found: prodotti.length,
+        manuals_found: totalManualsFound,
+        grouped_results_count: allResults.length,
+        search_params: Object.fromEntries(searchParams.entries()),
+        products_data: prodotti,
+        results_summary: allResults.map(result => ({
+          codice_manuale: result.codiceManuale,
+          lingue_disponibili: result.lingueDisponibili,
+          revisione: result.revisione
+        }))
+      }
+    };
+
+    // Salva in parallelo senza bloccare la risposta
+    supabase.from('searches').insert(searchData).then(({ error }) => {
+      if (error) {
+        console.error('Error saving search data:', error);
+      }
+    });
+
     return NextResponse.json({ 
       data: allResults,
       searchTerm: serialNumber
@@ -121,6 +168,26 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Search API error:', error);
+
+    // Salva anche gli errori
+    const searchData = {
+      serial_searched: searchParams?.get('serial_number') || 'unknown',
+      body: {
+        request_timestamp: new Date().toISOString(),
+        user_agent: request.headers.get('user-agent'),
+        ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+        search_result: 'error',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        search_params: Object.fromEntries(searchParams.entries())
+      }
+    };
+
+    supabase.from('searches').insert(searchData).then(({ error: insertError }) => {
+      if (insertError) {
+        console.error('Error saving error search data:', insertError);
+      }
+    });
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
