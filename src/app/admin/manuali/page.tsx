@@ -30,12 +30,15 @@ export default function ManualiPage() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [formData, setFormData] = useState<ManualeInsert & { file?: File }>({
     codice_manuale: '',
+    name: '',
     descrizione: '',
     lingua: 'IT',
     revisione_code: ''
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLingua, setSelectedLingua] = useState('');
+  const [selectedCodiceManuale, setSelectedCodiceManuale] = useState('');
+  const [codiciManuali, setCodiciManuali] = useState<string[]>([]);
   const [notification, setNotification] = useState<Notification>({
     type: 'success',
     message: '',
@@ -60,16 +63,53 @@ export default function ManualiPage() {
     loadData();
   }, []);
 
+  // Reload data when filters change
+  useEffect(() => {
+    if (manuali.length > 0 || searchTerm || selectedLingua || selectedCodiceManuale) {
+      loadData();
+    }
+  }, [searchTerm, selectedLingua, selectedCodiceManuale]);
+
   const loadData = async () => {
     try {
-      // Load manuali
-      const { data: manualiData, error: manualiError } = await supabase
+      // Build query with filters
+      let query = supabase
         .from('manuali')
-        .select('*')
+        .select('*');
+
+      // Apply search filter
+      if (searchTerm.trim()) {
+        query = query.or(`codice_manuale.ilike.%${searchTerm}%,descrizione.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%`);
+      }
+
+      // Apply language filter
+      if (selectedLingua) {
+        query = query.eq('lingua', selectedLingua);
+      }
+
+      // Apply codice manuale filter
+      if (selectedCodiceManuale) {
+        query = query.eq('codice_manuale', selectedCodiceManuale);
+      }
+
+      // Execute query
+      const { data: manualiData, error: manualiError } = await query
         .order('created_at', { ascending: false });
 
       if (manualiError) throw manualiError;
       setManuali(manualiData || []);
+
+      // Load unique codici manuali for filter dropdown
+      const { data: codiciData, error: codiciError } = await supabase
+        .from('manuali')
+        .select('codice_manuale')
+        .not('codice_manuale', 'is', null)
+        .order('codice_manuale');
+
+      if (!codiciError && codiciData) {
+        const uniqueCodici = [...new Set(codiciData.map(item => item.codice_manuale).filter(Boolean))] as string[];
+        setCodiciManuali(uniqueCodici);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       showNotification('error', 'Errore nel caricamento dei dati');
@@ -144,6 +184,7 @@ export default function ManualiPage() {
 
       const saveData = {
         codice_manuale: formData.codice_manuale,
+        name: formData.name,
         descrizione: formData.descrizione,
         lingua: formData.lingua,
         revisione_code: formData.revisione_code,
@@ -184,6 +225,7 @@ export default function ManualiPage() {
     setEditingManuale(manuale);
     setFormData({
       codice_manuale: manuale.codice_manuale,
+      name: manuale.name,
       descrizione: manuale.descrizione,
       lingua: manuale.lingua,
       revisione_code: manuale.revisione_code
@@ -237,6 +279,7 @@ export default function ManualiPage() {
   const resetForm = () => {
     setFormData({
       codice_manuale: '',
+      name: '',
       descrizione: '',
       lingua: 'IT',
       revisione_code: ''
@@ -245,15 +288,7 @@ export default function ManualiPage() {
     setShowForm(false);
   };
 
-  const filteredManuali = manuali.filter(manuale => {
-    const matchesSearch = 
-      manuale.codice_manuale?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      manuale.descrizione?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesLingua = !selectedLingua || manuale.lingua === selectedLingua;
-    
-    return matchesSearch && matchesLingua;
-  });
+  // No more frontend filtering - all filtering is done in backend
 
       return (
       <div className="max-w-7xl mx-auto space-y-6 pt-2">
@@ -309,15 +344,29 @@ export default function ManualiPage() {
 
         {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="md:col-span-2">
               <input
                 type="text"
-                placeholder="Cerca per Codice Manuale o Descrizione..."
+                placeholder="Cerca per Nome, Codice Manuale o Descrizione..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full h-10 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-500"
               />
+            </div>
+            <div>
+              <select
+                value={selectedCodiceManuale}
+                onChange={(e) => setSelectedCodiceManuale(e.target.value)}
+                className="w-full h-10 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white text-gray-700"
+              >
+                <option value="">Tutti i codici</option>
+                {codiciManuali.map((codice) => (
+                  <option key={codice} value={codice}>
+                    {codice}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <select
@@ -335,7 +384,7 @@ export default function ManualiPage() {
             </div>
           </div>
           <div className="mt-2 text-sm text-gray-700">
-            {filteredManuali.length} di {manuali.length} manuali
+            {manuali.length} manuali trovati
           </div>
         </div>
 
@@ -347,6 +396,9 @@ export default function ManualiPage() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Codice Manuale
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nome
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Descrizione
@@ -365,19 +417,26 @@ export default function ManualiPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center">
+                    <td colSpan={6} className="px-6 py-4 text-center">
                       <div className="flex justify-center">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       </div>
                     </td>
                   </tr>
-                ) : filteredManuali.length > 0 ? (
-                  filteredManuali.map((manuale) => (
+                ) : manuali.length > 0 ? (
+                  manuali.map((manuale) => (
                     <tr key={manuale.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {manuale.codice_manuale || 'N/A'}
                         {manuale.revisione_code && (
                           <div className="text-xs text-gray-500">Rev. {manuale.revisione_code}</div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
+                        {manuale.name ? (
+                          <span className="font-medium text-gray-900">{manuale.name}</span>
+                        ) : (
+                          <span className="text-red-500 italic font-medium">Nome mancante</span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
@@ -421,7 +480,7 @@ export default function ManualiPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-gray-700">
+                    <td colSpan={6} className="px-6 py-4 text-center text-gray-700">
                       Nessun manuale trovato
                     </td>
                   </tr>
@@ -434,7 +493,7 @@ export default function ManualiPage() {
         {/* Form Modal */}
         {showForm && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[95vh] overflow-y-auto">
               <div className="px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900">
                   {editingManuale ? 'Modifica Manuale' : 'Nuovo Manuale'}
@@ -442,6 +501,21 @@ export default function ManualiPage() {
               </div>
               
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                {/* Nome del Manuale - Campo obbligatorio */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nome del Manuale *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-500"
+                    placeholder="es. Manuale Installazione Ventilatore"
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -506,20 +580,39 @@ export default function ManualiPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     File PDF {!editingManuale && '*'}
                   </label>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={(e) => setFormData(prev => ({ ...prev, file: e.target.files?.[0] }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
-                    required={!editingManuale}
-                  />
-                  <p className="text-xs text-gray-700 mt-1">
-                    Solo file PDF, massimo 10MB
-                  </p>
-                  {editingManuale?.file_url && (
-                    <p className="text-xs text-green-600 mt-1">
-                      File attuale presente. Seleziona un nuovo file per sostituirlo.
-                    </p>
+                  {editingManuale?.file_url ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center">
+                          <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-sm text-green-800 font-medium">File PDF attuale caricato</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(editingManuale.file_url!, `${editingManuale.codice_manuale}_${editingManuale.lingua}.pdf`)}
+                          className="text-green-600 hover:text-green-800 text-sm underline"
+                        >
+                          Visualizza
+                        </button>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => setFormData(prev => ({ ...prev, file: e.target.files?.[0] }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        placeholder="Clicca qui per modificare il file"
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => setFormData(prev => ({ ...prev, file: e.target.files?.[0] }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      required
+                    />
                   )}
                 </div>
 

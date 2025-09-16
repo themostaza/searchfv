@@ -10,6 +10,7 @@ interface ManualResult {
   codiceManuale: string;
   nome: string;
   descrizione: string;
+  descrizioni?: { [lingua: string]: string }; // Descrizioni per lingua (opzionale per compatibilità)
   revisione: string;
   lingueDisponibili: string[];
   fileUrls?: { [lingua: string]: string };
@@ -26,17 +27,19 @@ const lingue = [
 export default function ManualSearch() {
   const searchParams = useSearchParams();
   const [serialNumber, setSerialNumber] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState('IT');
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [searchResults, setSearchResults] = useState<ManualResult[]>([]);
+  
+  // Use default language IT
+  const defaultLanguage = 'IT';
 
   // Gestione parametro URL serial
   useEffect(() => {
     const serialFromUrl = searchParams.get('serial');
     if (serialFromUrl) {
       setSerialNumber(serialFromUrl);
-      handleSearch(serialFromUrl, selectedLanguage);
+      handleSearch(serialFromUrl, defaultLanguage);
     }
   }, [searchParams]);
 
@@ -52,7 +55,7 @@ export default function ManualSearch() {
     setShowResults(false);
 
     try {
-      const response = await fetch(`/api/search?serial_number=${encodeURIComponent(searchSN)}&language=${lang || selectedLanguage}`);
+      const response = await fetch(`/api/search?serial_number=${encodeURIComponent(searchSN)}&language=${lang || defaultLanguage}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -133,9 +136,9 @@ export default function ManualSearch() {
       <main className="max-w-4xl mx-auto px-4 py-8 flex-grow">
         {/* Search Form */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="mb-6">
             {/* Serial Number Input */}
-            <div className="md:col-span-2">
+            <div>
               <label htmlFor="serial" className="block text-sm font-medium text-gray-700 mb-2">
                 Serial Number
               </label>
@@ -147,25 +150,6 @@ export default function ManualSearch() {
                 placeholder="Inserisci il Serial Number (es. 2504485)"
                 className="w-full h-12 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-colors text-gray-700"
               />
-            </div>
-
-            {/* Language Selector */}
-            <div>
-              <label htmlFor="language" className="block text-sm font-medium text-gray-700 mb-2">
-                Lingua
-              </label>
-              <select
-                id="language"
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="w-full h-12 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-colors bg-white text-gray-700"
-              >
-                {lingue.map((lingua) => (
-                  <option key={lingua.code} value={lingua.code}>
-                    {lingua.name}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -225,17 +209,19 @@ export default function ManualSearch() {
                       </h4>
                       <div className="flex flex-wrap gap-2">
                         {manual.lingueDisponibili.map((langCode: string) => {
-                          const isSelected = langCode === selectedLanguage;
                           return (
                             <button
                               key={langCode}
                               onClick={() => downloadManual(manual, langCode)}
-                              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                                isSelected
-                                  ? 'text-white shadow-md'
-                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-300'
-                              }`}
-                              style={isSelected ? { backgroundColor: '#007AC2' } : {}}
+                              className="px-4 py-2 rounded-lg text-sm font-medium transition-all bg-gray-100 text-gray-600 hover:text-white border border-gray-300"
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = '#007AC2';
+                                e.currentTarget.style.borderColor = '#007AC2';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '';
+                                e.currentTarget.style.borderColor = '';
+                              }}
                             >
                               <span className="flex items-center gap-2">
    
@@ -279,14 +265,10 @@ export default function ManualSearch() {
             </li>
             <li className="flex items-start">
               <span className="text-gray-400 mr-2">2.</span>
-              Seleziona la lingua desiderata dal menu a tendina
-            </li>
-            <li className="flex items-start">
-              <span className="text-gray-400 mr-2">3.</span>
               Clicca su &quot;Cerca Manuali&quot; per visualizzare i risultati
             </li>
             <li className="flex items-start">
-              <span className="text-gray-400 mr-2">4.</span>
+              <span className="text-gray-400 mr-2">3.</span>
               Scegli la lingua e scarica il manuale specifico per la tua macchina
             </li>
           </ul>

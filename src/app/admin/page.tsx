@@ -4,11 +4,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Tables } from '@/types/supabase';
 
-type Prodotto = Tables<'prodotti'>;
 type Manuale = Tables<'manuali'>;
 
 interface Stats {
-  totalProdotti: number;
   totalManuali: number;
   totalDownloads: number;
   totalSearches: number;
@@ -23,14 +21,12 @@ interface Stats {
     todayCount: number;
   };
   manualiPerLingua: { [key: string]: number };
-  recentProdotti: Prodotto[];
   recentManuali: Manuale[];
   topSearchedSerials: { serial: string; count: number }[];
 }
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
-    totalProdotti: 0,
     totalManuali: 0,
     totalDownloads: 0,
     totalSearches: 0,
@@ -45,7 +41,6 @@ export default function AdminDashboard() {
       todayCount: 0
     },
     manualiPerLingua: {},
-    recentProdotti: [],
     recentManuali: [],
     topSearchedSerials: []
   });
@@ -57,11 +52,6 @@ export default function AdminDashboard() {
 
   const loadStats = async () => {
     try {
-      // Conta prodotti
-      const { count: prodottiCount } = await supabase
-        .from('prodotti')
-        .select('*', { count: 'exact', head: true });
-
       // Conta manuali
       const { count: manualiCount } = await supabase
         .from('manuali')
@@ -141,13 +131,6 @@ export default function AdminDashboard() {
         manualiPerLingua[lingua] = (manualiPerLingua[lingua] || 0) + 1;
       });
 
-      // Prodotti recenti
-      const { data: recentProdotti } = await supabase
-        .from('prodotti')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
       // Manuali recenti
       const { data: recentManuali } = await supabase
         .from('manuali')
@@ -156,7 +139,6 @@ export default function AdminDashboard() {
         .limit(5);
 
       setStats({
-        totalProdotti: prodottiCount || 0,
         totalManuali: manualiCount || 0,
         totalDownloads: downloadsCount || 0,
         totalSearches: searchesCount || 0,
@@ -171,7 +153,6 @@ export default function AdminDashboard() {
           todayCount: todaySearches || 0
         },
         manualiPerLingua,
-        recentProdotti: recentProdotti || [],
         recentManuali: recentManuali || [],
         topSearchedSerials
       });
@@ -199,21 +180,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-        <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-l-4" style={{ borderLeftColor: '#007AC2' }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Prodotti Totali</p>
-              <p className="text-3xl font-bold text-gray-900">{stats.totalProdotti}</p>
-            </div>
-            <div className="p-3 rounded-full bg-blue-100">
-              <svg className="w-8 h-8" style={{ color: '#007AC2' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-            </div>
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
           <div className="flex items-center justify-between">
             <div>
@@ -274,35 +241,28 @@ export default function AdminDashboard() {
       </div>
 
       {/* Charts/Tables Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Manuali per Lingua */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">Manuali per Lingua</h3>
+            <h3 className="text-xl font-semibold text-gray-900">Manuali per lingua</h3>
             <div className="text-sm text-gray-500">
               {Object.keys(stats.manualiPerLingua).length} lingue attive
             </div>
           </div>
           <div className="space-y-4">
             {Object.keys(stats.manualiPerLingua).length > 0 ? (
-              Object.entries(stats.manualiPerLingua).map(([lingua, count]) => (
+              Object.entries(stats.manualiPerLingua)
+                .sort(([,a], [,b]) => b - a)
+                .map(([lingua, count], index) => (
                 <div key={lingua} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#007AC2' }}></div>
+                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <span className="text-sm font-bold text-blue-600">#{index + 1}</span>
+                    </div>
                     <span className="font-medium text-gray-700">{lingua}</span>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-24 h-2 bg-gray-200 rounded-full">
-                      <div
-                        className="h-2 rounded-full transition-all duration-300"
-                        style={{
-                          backgroundColor: '#007AC2',
-                          width: `${stats.totalManuali > 0 ? (count / stats.totalManuali) * 100 : 0}%`
-                        }}
-                      />
-                    </div>
-                    <span className="text-sm font-semibold text-gray-900 w-8 text-right">{count}</span>
-                  </div>
+                  <span className="text-sm font-semibold text-gray-900">{count}</span>
                 </div>
               ))
             ) : (
@@ -317,7 +277,7 @@ export default function AdminDashboard() {
         {/* Serial Numbers più Cercati */}
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">Serial Più Cercati</h3>
+            <h3 className="text-xl font-semibold text-gray-900">Serial number più cercati</h3>
             <div className="text-sm text-gray-500">
               Top 5 ricerche
             </div>
@@ -330,21 +290,9 @@ export default function AdminDashboard() {
                     <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
                       <span className="text-sm font-bold text-indigo-600">#{index + 1}</span>
                     </div>
-                    <div>
-                      <span className="font-medium text-gray-900">{item.serial}</span>
-                    </div>
+                    <span className="font-medium text-gray-900">{item.serial}</span>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-16 h-2 bg-gray-200 rounded-full">
-                      <div
-                        className="h-2 rounded-full transition-all duration-300 bg-indigo-500"
-                        style={{
-                          width: `${stats.topSearchedSerials.length > 0 ? (item.count / stats.topSearchedSerials[0].count) * 100 : 0}%`
-                        }}
-                      />
-                    </div>
-                    <span className="text-sm font-semibold text-gray-900 w-6 text-right">{item.count}</span>
-                  </div>
+                  <span className="text-sm font-semibold text-gray-900">{item.count}</span>
                 </div>
               ))
             ) : (
@@ -356,49 +304,13 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Prodotti Recenti */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-semibold text-gray-900">Prodotti Recenti</h3>
-            <div className="text-sm text-gray-500">
-              Ultimi {stats.recentProdotti.length} aggiunti
-            </div>
-          </div>
-          <div className="space-y-4">
-            {stats.recentProdotti.length > 0 ? (
-              stats.recentProdotti.map((prodotto) => (
-                <div key={prodotto.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{prodotto.serial_number}</p>
-                      <p className="text-sm text-gray-500">{prodotto.codice_manuale || 'N/A'}</p>
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-400 bg-white px-2 py-1 rounded">
-                    {new Date(prodotto.created_at).toLocaleDateString('it-IT')}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-8">
-                <div className="text-gray-400 text-4xl mb-2">📦</div>
-                <p className="text-gray-500">Nessun prodotto ancora creato</p>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Manuali Recenti */}
       <div className="bg-white rounded-lg shadow-md">
         <div className="px-6 py-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
-            <h3 className="text-xl font-semibold text-gray-900">Manuali Recenti</h3>
+            <h3 className="text-xl font-semibold text-gray-900">Manuali recenti</h3>
             <div className="text-sm text-gray-500">
               Ultimi {stats.recentManuali.length} caricati
             </div>

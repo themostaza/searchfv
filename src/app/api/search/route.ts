@@ -6,6 +6,7 @@ interface GroupedManuale {
   codiceManuale: string | null;
   nome: string;
   descrizione: string;
+  descrizioni: { [lingua: string]: string }; // Aggiungiamo le descrizioni per lingua
   revisione: string;
   lingueDisponibili: string[];
   fileUrls: { [lingua: string]: string };
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
         .select(`
           id,
           codice_manuale,
+          name,
           descrizione,
           lingua,
           revisione_code,
@@ -112,8 +114,9 @@ export async function GET(request: NextRequest) {
           groupedManuali[key] = {
             sn: serialNumber,
             codiceManuale: manuale.codice_manuale,
-            nome: getManualName(manuale.codice_manuale),
-            descrizione: manuale.descrizione || getManualDescription(manuale.codice_manuale),
+            nome: getManualName(manuale.codice_manuale, manuale.name), // Passiamo anche il nome dal DB
+            descrizione: '', // Sarà impostata dopo aver raccolto tutte le descrizioni
+            descrizioni: {}, // Raccogliamo tutte le descrizioni per lingua
             revisione: manuale.revisione_code || prodotto.revisione_code || '001',
             lingueDisponibili: [],
             fileUrls: {}
@@ -126,7 +129,20 @@ export async function GET(request: NextRequest) {
           if (manuale.file_url) {
             groupedManuali[key].fileUrls[manuale.lingua] = manuale.file_url;
           }
+          
+          // Aggiungi la descrizione per questa lingua
+          if (manuale.descrizione) {
+            groupedManuali[key].descrizioni[manuale.lingua] = manuale.descrizione;
+          } else {
+            // Usa la descrizione di default se non presente nel DB
+            groupedManuali[key].descrizioni[manuale.lingua] = getManualDescription(manuale.codice_manuale);
+          }
         }
+      });
+
+      // Imposta la descrizione principale per ogni manuale con priorità IT > EN > prima disponibile
+      Object.values(groupedManuali).forEach(manuale => {
+        manuale.descrizione = selectBestDescription(manuale.descrizioni);
       });
 
       // Aggiungi i risultati di questo prodotto
@@ -195,19 +211,52 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper functions to generate default names and descriptions
-function getManualName(codiceManuale: string | null): string {
-  if (!codiceManuale) return 'Manuale Non Specificato';
+// Helper function to select best description based on language priority: IT > EN > first available
+function selectBestDescription(descrizioni: { [lingua: string]: string }): string {
+  // Priorità 1: Italiano
+  if (descrizioni['IT']) {
+    return descrizioni['IT'];
+  }
   
-  const mapping: { [key: string]: string } = {
-    'MVC_STD': 'Manuale Ventilatore Standard',
-    'ROLLOUT': 'Manuale Installazione Rollout',
-    'SWINGOUT': 'Manuale Installazione Swingout',
-    'MAINTENANCE': 'Manuale Manutenzione',
-    'TECHNICAL': 'Specifiche Tecniche'
-  };
+  // Priorità 2: Inglese
+  if (descrizioni['EN']) {
+    return descrizioni['EN'];
+  }
+  
+  // Priorità 3: Prima lingua disponibile
+  const lingueDisponibili = Object.keys(descrizioni);
+  if (lingueDisponibili.length > 0) {
+    return descrizioni[lingueDisponibili[0]];
+  }
+  
+  // Fallback se non ci sono descrizioni
+  return 'Manuale per ventilatore Ferrari';
+}
 
-  return mapping[codiceManuale] || `Manuale ${codiceManuale}`;
+// Helper functions to generate default names and descriptions
+function getManualName(codiceManuale: string | null, nameFromDb: string | null = null): string {
+  // Priorità 1: Nome dal database se presente
+  if (nameFromDb && nameFromDb.trim()) {
+    return nameFromDb.trim();
+  }
+  
+  // Priorità 2: Mapping basato sul codice manuale
+  if (codiceManuale) {
+    const mapping: { [key: string]: string } = {
+      'MVC_STD': 'Manuale Ventilatore Standard',
+      'ROLLOUT': 'Manuale Installazione Rollout',
+      'SWINGOUT': 'Manuale Installazione Swingout',
+      'MAINTENANCE': 'Manuale Manutenzione',
+      'TECHNICAL': 'Specifiche Tecniche'
+    };
+    
+    if (mapping[codiceManuale]) {
+      return mapping[codiceManuale];
+    }
+  }
+  
+  // Priorità 3: Fallback standard per tutti gli altri casi
+  return 'Manuale Standard';
 }
 
 function getManualDescription(codiceManuale: string | null): string {
