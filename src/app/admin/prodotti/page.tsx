@@ -8,6 +8,12 @@ type Prodotto = Tables<'prodotti'>;
 type ProdottoInsert = TablesInsert<'prodotti'>;
 type ProdottoUpdate = TablesUpdate<'prodotti'>;
 
+interface Notification {
+  type: 'success' | 'error';
+  message: string;
+  show: boolean;
+}
+
 export default function ProdottiPage() {
   const [prodotti, setProdotti] = useState<Prodotto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,23 +25,77 @@ export default function ProdottiPage() {
     revisione_code: '',
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCodiceManuale, setSelectedCodiceManuale] = useState('');
+  const [codiciManuali, setCodiciManuali] = useState<string[]>([]);
+  const [notification, setNotification] = useState<Notification>({
+    type: 'success',
+    message: '',
+    show: false
+  });
+
+  // Auto-hide notification after 4 seconds
+  useEffect(() => {
+    if (notification.show) {
+      const timer = setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification.show]);
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setNotification({ type, message, show: true });
+  };
 
   useEffect(() => {
     loadProdotti();
   }, []);
 
+  // Reload data when filters change
+  useEffect(() => {
+    if (prodotti.length > 0 || searchTerm || selectedCodiceManuale) {
+      loadProdotti();
+    }
+  }, [searchTerm, selectedCodiceManuale]);
+
   const loadProdotti = async () => {
     try {
-      const { data, error } = await supabase
+      // Build query with filters
+      let query = supabase
         .from('prodotti')
-        .select('*')
+        .select('*');
+
+      // Apply search filter
+      if (searchTerm.trim()) {
+        query = query.or(`serial_number.ilike.%${searchTerm}%,codice_manuale.ilike.%${searchTerm}%`);
+      }
+
+      // Apply codice manuale filter
+      if (selectedCodiceManuale) {
+        query = query.eq('codice_manuale', selectedCodiceManuale);
+      }
+
+      // Execute query
+      const { data: prodottiData, error: prodottiError } = await query
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setProdotti(data || []);
+      if (prodottiError) throw prodottiError;
+      setProdotti(prodottiData || []);
+
+      // Load unique codici manuali for filter dropdown
+      const { data: codiciData, error: codiciError } = await supabase
+        .from('prodotti')
+        .select('codice_manuale')
+        .not('codice_manuale', 'is', null)
+        .order('codice_manuale');
+
+      if (!codiciError && codiciData) {
+        const uniqueCodici = [...new Set(codiciData.map(item => item.codice_manuale).filter(Boolean))] as string[];
+        setCodiciManuali(uniqueCodici);
+      }
     } catch (error) {
       console.error('Error loading prodotti:', error);
-      alert('Errore nel caricamento dei prodotti');
+      showNotification('error', 'Errore nel caricamento dei prodotti');
     } finally {
       setLoading(false);
     }
@@ -43,33 +103,62 @@ export default function ProdottiPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.serial_number?.trim()) {
+      showNotification('error', 'Il Serial Number è obbligatorio');
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Check for duplicate serial number (except when editing the same product)
+      const { data: existingProduct, error: checkError } = await supabase
+        .from('prodotti')
+        .select('id')
+        .eq('serial_number', formData.serial_number.trim())
+        .neq('id', editingProdotto?.id || '');
+
+      if (checkError) throw checkError;
+
+      if (existingProduct && existingProduct.length > 0) {
+        showNotification('error', 'Esiste già un prodotto con questo Serial Number');
+        setLoading(false);
+        return;
+      }
+
+      const saveData = {
+        serial_number: formData.serial_number.trim(),
+        codice_manuale: formData.codice_manuale?.trim() || null,
+        revisione_code: formData.revisione_code?.trim() || null,
+      };
+
       if (editingProdotto) {
         // Update existing product
         const { error } = await supabase
           .from('prodotti')
-          .update(formData as ProdottoUpdate)
+          .update(saveData as ProdottoUpdate)
           .eq('id', editingProdotto.id);
 
         if (error) throw error;
-        alert('Prodotto aggiornato con successo!');
+        showNotification('success', 'Prodotto aggiornato con successo!');
       } else {
         // Create new product
         const { error } = await supabase
           .from('prodotti')
-          .insert(formData);
+          .insert(saveData as ProdottoInsert);
 
         if (error) throw error;
-        alert('Prodotto creato con successo!');
+        showNotification('success', 'Prodotto creato con successo!');
       }
 
       resetForm();
       loadProdotti();
     } catch (error) {
       console.error('Error saving prodotto:', error);
-      alert('Errore nel salvataggio del prodotto');
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      showNotification('error', `Errore nel salvataggio del prodotto: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -95,11 +184,12 @@ export default function ProdottiPage() {
         .eq('id', id);
 
       if (error) throw error;
-      alert('Prodotto eliminato con successo!');
+      showNotification('success', 'Prodotto eliminato con successo!');
       loadProdotti();
     } catch (error) {
       console.error('Error deleting prodotto:', error);
-      alert('Errore nell\'eliminazione del prodotto');
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      showNotification('error', `Errore nell'eliminazione del prodotto: ${errorMessage}`);
     }
   };
 
@@ -113,13 +203,40 @@ export default function ProdottiPage() {
     setShowForm(false);
   };
 
-  const filteredProdotti = prodotti.filter(prodotto =>
-    prodotto.serial_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    prodotto.codice_manuale?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // No more frontend filtering - all filtering is done in backend
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pt-2">
+        {/* Notification Toast */}
+        {notification.show && (
+          <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${
+            notification.type === 'success' 
+              ? 'bg-green-500 text-white' 
+              : 'bg-red-500 text-white'
+          }`}>
+            <div className="flex items-center">
+              {notification.type === 'success' ? (
+                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              )}
+              <span className="text-sm font-medium">{notification.message}</span>
+              <button
+                onClick={() => setNotification(prev => ({ ...prev, show: false }))}
+                className="ml-4 text-white hover:text-gray-200"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex justify-between items-center">
@@ -127,7 +244,7 @@ export default function ProdottiPage() {
             <h1 className="text-2xl font-bold text-gray-900">Gestione Prodotti</h1>
               <p className="text-gray-700 mt-2">Gestisci i prodotti e i loro serial number</p>
             </div>
-            {/* <button
+            <button
               onClick={() => setShowForm(true)}
               className="inline-flex items-center px-6 py-3 text-white rounded-lg font-medium hover:opacity-90 transition-all shadow-md"
               style={{ backgroundColor: '#007AC2' }}
@@ -136,14 +253,14 @@ export default function ProdottiPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               Aggiungi Prodotto
-            </button> */}
+            </button>
           </div>
         </div>
 
-        {/* Search */}
+        {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center space-x-4">
-            <div className="flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2">
               <input
                 type="text"
                 placeholder="Cerca per Serial Number o Codice Manuale..."
@@ -152,9 +269,23 @@ export default function ProdottiPage() {
                 className="w-full h-10 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700 placeholder-gray-500"
               />
             </div>
-            <div className="text-sm text-gray-700">
-              {filteredProdotti.length} di {prodotti.length} prodotti
+            <div>
+              <select
+                value={selectedCodiceManuale}
+                onChange={(e) => setSelectedCodiceManuale(e.target.value)}
+                className="w-full h-10 px-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white text-gray-700"
+              >
+                <option value="">Tutti i codici</option>
+                {codiciManuali.map((codice) => (
+                  <option key={codice} value={codice}>
+                    {codice}
+                  </option>
+                ))}
+              </select>
             </div>
+          </div>
+          <div className="mt-2 text-sm text-gray-700">
+            {prodotti.length} prodotti trovati
           </div>
         </div>
 
@@ -176,22 +307,22 @@ export default function ProdottiPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Data Creazione
                   </th>
-                  {/* <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Azioni
-                  </th> */}
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center">
+                    <td colSpan={5} className="px-6 py-4 text-center">
                       <div className="flex justify-center">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       </div>
                     </td>
                   </tr>
-                ) : filteredProdotti.length > 0 ? (
-                  filteredProdotti.map((prodotto) => (
+                ) : prodotti.length > 0 ? (
+                  prodotti.map((prodotto) => (
                     <tr key={prodotto.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {prodotto.serial_number || 'N/A'}
@@ -205,7 +336,7 @@ export default function ProdottiPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                         {new Date(prodotto.created_at).toLocaleDateString('it-IT')}
                       </td>
-                      {/* <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                         <button
                           onClick={() => handleEdit(prodotto)}
                           className="text-blue-600 hover:text-blue-900 transition-colors"
@@ -218,12 +349,12 @@ export default function ProdottiPage() {
                         >
                           Elimina
                         </button>
-                      </td> */}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-gray-700">
+                    <td colSpan={5} className="px-6 py-4 text-center text-gray-700">
                       Nessun prodotto trovato
                     </td>
                   </tr>
@@ -284,18 +415,6 @@ export default function ProdottiPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ordine Revisione
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formData.revisione_code || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, revisione_code: e.target.value }))}
-                    className="w-full h-10 px-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-gray-700"
-                  />
-                </div>
 
                 <div className="flex justify-end space-x-3 pt-4">
                   <button

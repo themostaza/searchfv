@@ -107,14 +107,62 @@ export async function POST(request: NextRequest) {
       const prodotto = prodotti[i];
       
       try {
+        // Verifica che serial_number e codice_manuale siano forniti
+        if (!prodotto.serial_number || !prodotto.codice_manuale) {
+          errors.push({
+            index: i,
+            prodotto,
+            error: 'serial_number and codice_manuale are required'
+          });
+          continue;
+        }
+
+        // Cerca il revisione_code più alto per questo codice_manuale nella tabella manuali (lingua IT)
+        const { data: manuali, error: manualiError } = await supabase
+          .from('manuali')
+          .select('revisione_code')
+          .eq('codice_manuale', prodotto.codice_manuale)
+          .eq('lingua', 'IT')
+          .not('revisione_code', 'is', null)
+          .order('revisione_code', { ascending: false });
+
+        if (manualiError) {
+          errors.push({
+            index: i,
+            prodotto,
+            error: `Error fetching manuali: ${manualiError.message}`
+          });
+          continue;
+        }
+
+        // Trova il revisione_code più alto
+        let maxRevisioneCode = '000';
+        if (manuali && manuali.length > 0) {
+          // Ordina i revisione_code come numeri per trovare il più alto
+          const revisioneCodes = manuali
+            .map(m => m.revisione_code)
+            .filter((code): code is string => code !== null && /^\d{3}$/.test(code)) // Solo codici nel formato 001, 002, ecc.
+            .sort((a, b) => parseInt(b) - parseInt(a));
+          
+          if (revisioneCodes.length > 0) {
+            maxRevisioneCode = revisioneCodes[0];
+          }
+        }
+
+        // Assegna il revisione_code trovato al prodotto
+        const prodottoConRevisione = {
+          ...prodotto,
+          revisione_code: maxRevisioneCode
+        };
+
         // Verifica che il prodotto non esista già
         // Controlla per serial_number, codice_manuale e revisione_code uguali
         const { data: existing, error: checkError } = await supabase
           .from('prodotti')
           .select('id')
-          .eq('serial_number', prodotto.serial_number || '')
-          .eq('codice_manuale', prodotto.codice_manuale || '')
-          .eq('revisione_code', prodotto.revisione_code || '')
+          .eq('serial_number', prodottoConRevisione.serial_number || '')
+          .eq('codice_manuale', prodottoConRevisione.codice_manuale || '')
+          .eq('revisione_code', prodottoConRevisione.revisione_code || '')
           .limit(1);
 
         if (checkError) {
@@ -139,7 +187,7 @@ export async function POST(request: NextRequest) {
         // Inserisci il prodotto se non esiste
         const { data: inserted, error: insertError } = await supabase
           .from('prodotti')
-          .insert(prodotto)
+          .insert(prodottoConRevisione)
           .select()
           .single();
 
@@ -155,7 +203,8 @@ export async function POST(request: NextRequest) {
         results.push({
           index: i,
           prodotto: inserted,
-          status: 'created'
+          status: 'created',
+          assigned_revisione_code: maxRevisioneCode
         });
 
       } catch (itemError) {
